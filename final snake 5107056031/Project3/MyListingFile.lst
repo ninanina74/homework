@@ -1,0 +1,1152 @@
+Microsoft (R) Macro Assembler Version 14.16.27024.1	    01/09/19 11:13:28
+	Snake.as					     Page 1 - 1
+
+
+				TITLE Snake.asm
+				;2019/1/9
+				;期末報告
+
+				INCLUDE Irvine32.inc
+			      C ; Include file for Irvine32.lib             (Irvine32.inc)
+			      C 
+			      C ;OPTION CASEMAP:NONE		; optional: make identifiers case-sensitive
+			      C 
+			      C INCLUDE SmallWin.inc		; MS-Windows prototypes, structures, and constants
+			      C .NOLIST
+			      C .LIST
+			      C 
+			      C INCLUDE VirtualKeys.inc
+			      C ; VirtualKeys.inc
+			      C .NOLIST
+			      C .LIST
+			      C 
+			      C 
+			      C .NOLIST
+			      C .LIST
+			      C 
+
+ 00000000			.DATA
+
+				;lable 標籤宣告說明
+
+ 00000000  00000708 [		a WORD 1800 DUP(0)  ; 周邊設定 row cloum
+	    0000
+	   ]
+ 00000E10 12			tailR BYTE 18d         ; 給蛇尾row  空間18d       
+ 00000E11 2F			tailC BYTE 47d         ; 給蛇尾colum 空間47d
+ 00000E12 0D			headR BYTE 13d         ; 蛇頭 row 空間13d
+ 00000E13 2F			headC BYTE 47d         ; 蛇頭 colum 空間47d
+ 00000E14 00			foodR BYTE 0           ; 綠色食物 row fR1 標籤
+ 00000E15 00			foodC BYTE 0           ; 綠色食物 colum fC標簽
+
+ 00000E16 00			tmpR BYTE 0         ; 暫存row 值的標籤
+ 00000E17 00			tmpC BYTE 0         ; 暫存colum值的標籤
+
+ 00000E18 00			Up BYTE 0d          ; 設定往上標籤
+ 00000E19 00			Lf BYTE 0d          ; 設定往左標籤
+ 00000E1A 00			Dn BYTE 0d          ; 設定往下標籤
+ 00000E1B 00			Ri BYTE 0d          ; 設定往右標籤
+
+ 00000E1C 03			eTail   BYTE    3d  ; 做為辦別吃到食物尾巴是否曾長標籤 
+ 00000E1D 0000			search  WORD    0d  ; 作為尋找標籤
+ 00000E1F 00			eGame   BYTE    0d  ; 撞牆後結束的標籤
+ 00000E20 00000000		cScore  DWORD   0d  ; 總分顯示標籤
+
+ 00000E24 77			d       BYTE    'w' ; d 為當下作為蛇體判斷標籤
+ 00000E25 77			newD    BYTE    'w' ; newD 為新的蛇體蛇體判斷標籤
+ 00000E26 00000064		delTime DWORD   100 ; 速度設定100 
+
+ 00000E2A AB F6 31 2C 53	menuS   BYTE "按1,Start the Game" ,0     ;開始遊戲標籤
+	   74 61 72 74 20
+	   74 68 65 20 47
+	   61 6D 65 00
+ 00000E3D 47 61 6D 65 20	hitS    BYTE "Game over", 0  ; 遊戲結束標籤
+	   6F 76 65 72 00
+ 00000E47 53 63 6F 72 65	scoreS  BYTE "Score: 0", 0  ;分數標籤
+	   3A 20 30 00
+
+ 00000E50 00000000		myHandle DWORD ?    ; 是否終止的input變數標籤
+ 00000E54 00000000		numInp   DWORD ?    ;  吃到食物的變數緩衝標籤 
+ 00000E58  00000010 [		temp BYTE 16 DUP(?) ; 向記憶體宣告16byte 暫存空間 (forINPUT_RECORD) 標籤
+	    00
+	   ]
+ 00000E68 00000000		bRead    DWORD ?    ; 讀取暫存值的 假指令 irvine函示中提供
+
+ 00000000			.CODE
+				;---------------------------------------------------------------------------------------
+ 00000000			main PROC     ;主程式
+
+ 00000000			menu:                           ;選單 function local 變數
+ 00000000  E8 00000000 E	    CALL Randomize              ;食物亂放 call副程式(Randmize)
+ 00000005  E8 00000000 E	    CALL Clrscr                 ; irvine 函數提供 清屏
+ 0000000A  BA 00000E2A R	    MOV EDX, OFFSET menuS       ; menuS 取出放到EDX暫存器
+ 0000000F  E8 00000000 E	    CALL WriteString            ; irvine 提供 螢幕顯示
+				    
+ 00000014			wait1:
+ 00000014  E8 00000000 E		CALL ReadChar               ;irvine 提供 讀取字符 1回傳  開始  
+ 00000019  3C 31		    CMP AL, '1'                 ; 1號選單
+ 0000001B  74 07		    JE startG                   ;跳到開始遊戲畫面
+					EXIT                        ;跳出 
+
+ 00000024			startG:                     ; 遊戲開始設定function  local變數	
+ 00000024  B8 00000000		    MOV EAX, 0                  ; 清空暫存
+ 00000029  BA 00000000		    MOV EDX, 0                  ; 清空戰存 
+ 0000002E  E8 00000000 E	    CALL Clrscr                 ; 
+ 00000033  E8 00000014		    CALL initSnake              ; 呼叫initSnake 副程式
+ 00000038  E8 00000559		  CALL createFood             ; 呼叫食物建立 createFood
+ 0000003D  E8 00000087		    CALL startGame              ; 呼叫startGame 副程式
+ 00000042  E8 000005EF		   CALL Paint                  ; 呼叫 paint (上色)副程式
+ 00000047  E8 00000000 E	  CALL SetTextColor           ; 呼叫settextcolor副程式
+				  
+ 0000004C			main ENDP      ;主程式結束
+				;---------------------------------------------------------------------------------------
+ 0000004C			initSnake PROC USES EBX EDX         ;副程式蛇體初始設定  13~18 row number 並寫入 framebuffer中
+
+ 0000004E  B6 0D		    MOV DH, 13      ; 設定 row number to 13
+ 00000050  B2 2F		    MOV DL, 47      ; 設定 column number to 47
+ 00000052  66| BB 0001		    MOV BX, 1       ; 第一個蛇體片段
+ 00000056  E8 000005B0		    CALL saveIndex  ; 讀進 framebuffer
+ 0000005B  B6 0E		    MOV DH, 14      ; 
+ 0000005D  B2 2F		    MOV DL, 47      ; 
+ 0000005F  66| BB 0002		    MOV BX, 2       ; 第2個蛇體片段
+ 00000063  E8 000005A3		    CALL saveIndex  ;
+ 00000068  B6 0F		    MOV DH, 15      ; 
+ 0000006A  B2 2F		    MOV DL, 47      ; 
+ 0000006C  66| BB 0003		    MOV BX, 3       ; 第3個蛇體片段
+ 00000070  E8 00000596		    CALL saveIndex  ; 
+ 00000075  B6 10		    MOV DH, 16      ; 
+ 00000077  B2 2F		    MOV DL, 47      ; 
+ 00000079  66| BB 0004		    MOV BX, 4       ; 第4個蛇體片段
+ 0000007D  E8 00000589		    CALL saveIndex  ;  
+ 00000082  B6 11		    MOV DH, 17     ; 
+ 00000084  B2 2F		    MOV DL, 47      ; 
+ 00000086  66| BB 0005		    MOV BX, 5       ; 第4個蛇體片段
+ 0000008A  E8 0000057C		    CALL saveIndex  ; 呼叫副程式  存入指標
+				 
+				 
+ 0000008F  B6 12		    MOV DH, 18      ; 
+ 00000091  B2 2F		    MOV DL, 47      ; 
+ 00000093  66| BB 0006		    MOV BX, 6       ; 第5個蛇體片段
+ 00000097  E8 0000056F		    CALL saveIndex  ; 
+				 RET                 ;回傳值
+ 0000009F			initSnake ENDP      ;初始蛇體副程式結束
+				;---------------------------------------------------------------------------------------
+ 0000009F			clearMem PROC       ;邊界設定副程式 (邊界觸碰設定)
+
+ 0000009F  B6 00		    MOV DH, 0               ;設定 row DH暫存器為0
+ 000000A1  66| BB 0000		    MOV BX, 0               ;設定資料暫存器BX為0
+
+ 000000A5			    oLoop:                  ; 對 rows 子程式設定邊界
+ 000000A5  80 FE 18		        CMP DH, 24          ; 最大24 超過死掉                      
+ 000000A8  74 1B		        JE endOLoop         ; 跳到死亡子程式
+ 000000AA  E8 0000055C				CALL saveIndex      ;呼叫saveindex 指標
+ 000000AF  FE C6				INC DH              ;寫入row暫存 DH
+ 000000B1  EB F2				JMP oLoop           ;繼續在oLoop 內圈執行 直到條成立 
+
+ 000000B3			    iLoop:              ;  對column設定子程式最大值
+ 000000B3  80 FA 4B		        CMP DL, 75      ; 
+ 000000B6  74 09		        JE endILoop     ; 
+ 000000B8  E8 0000054E		        CALL saveIndex  ;                          
+ 000000BD  FE C2		        INC DL          ; 
+ 000000BF  EB F2				JMP iLoop       ;
+
+ 000000C1			    endILoop:               ; cloumn iloop結束 
+					
+ 000000C1  FE C6			    INC DH              ; 寫入row DH暫存
+ 000000C3  EB E0		        JMP oLoop           ; 跳到oloop外圈繼續
+
+ 000000C5			    endOLoop:               ; row oloop 結束
+ 000000C5  FE C2			    INC DL              ; 寫入row DH暫存
+ 000000C7  EB EA		        JMP iLoop           ; 跳到iloop外圈繼續
+
+ 000000C9			clearMem ENDP  ;邊界副程式結束
+				;---------------------------------------------------------------------------------------
+ 000000C9			startGame PROC USES EAX EBX ECX EDX    ; 開始游戲富城程式   使用eax ebx ecx edx 暫存器
+ 000000CD  B8 0000001F		     MOV EAX, white + (blue * 16)       ; 顏色設定  ,藍底白字 (分數顯示code)
+ 000000D2  E8 00000000 E	     CALL SetTextColor                   ; irvine 顏色設定funtion提供    
+ 000000D7  B6 18		     MOV DH, 24                          ; 分數顯示位置row24
+ 000000D9  B2 00		     MOV DL, 0                           ; coulum0
+ 000000DB  E8 00000000 E		 CALL GotoXY                         ; irvine 在主控制台顯示位置行列指定 funtion提供 
+ 000000E0  BA 00000E47 R	     MOV EDX, OFFSET scoreS       
+ 000000E5  E8 00000000 E		 CALL WriteString                    ;irvine顯示在主控制台功能提供
+
+				    ;標準輸入設定 masm內建 控制台輸入緩衝區設定 EAX
+				     INVOKE getStdHandle, STD_INPUT_HANDLE
+ 000000F1  A3 00000E50 R	     MOV myHandle, EAX
+ 000000F6  B9 0000000A			 MOV ECX, 10
+
+				    ; 標準輸入設定 masm內建 從控制台中緩衝區 讀取數據設定
+				    INVOKE ReadConsoleInput, myHandle, ADDR temp, 1, ADDR bRead
+				    INVOKE ReadConsoleInput, myHandle, ADDR temp, 1, ADDR bRead
+
+ 00000129			    more:                        ;主要跑動的子程式函數
+
+				    ; 標準輸入設定 masm內建 從MYhandle中讀取資料
+				     INVOKE GetNumberOfConsoleInputEvents, myHandle, ADDR numInp
+				   
+ 00000139  8B 0D 00000E54 R	      MOV ECX, numInp
+ 0000013F  83 F9 00		      CMP ECX, 0                          ; 檢查吃入的暫存ECX是否為空
+ 00000142  0F 84 0000008F	      JE done                             ; 如果為空繼續跑
+
+				    ;從inputbuffer 讀取資料 並暫存至temp中
+				     INVOKE ReadConsoleInput, myHandle, ADDR temp, 1 , ADDR bRead
+				  
+ 0000015F  66| 8B 15		     MOV DX, WORD PTR temp               ; 確認是否為KEY_EVENT
+	   00000E58 R
+ 00000166  66| 83 FA 01		     CMP DX, 1                           ; 存入DX (DX 不為1)
+ 0000016A  75 66		     JNE SkipEvent                       ; 吃入後的蛇體 要跳skipEvent
+ 0000016C  8A 15 00000E5C R	     MOV DL, BYTE PTR [temp+4]       ; 釋放暫存空間指標 DL
+ 00000172  80 FA 00		     CMP DL, 0                        ;DL 為0 
+ 00000175  74 5B		     JE SkipEvent                    ;跳至SKIPEVEN
+ 00000177  8A 15 00000E62 R	     MOV DL, BYTE PTR [temp+10]      ; 讀取按壓見到 DL
+ 0000017D  80 FA 1B		     CMP DL, 1Bh                 ; 按ESC跳出  DL暫存地    (DL=1BH)
+ 00000180  74 7E		     JE quit                     ; 跳出 (quit)
+
+ 00000182  80 3D 00000E24 R	     CMP d, 'w'                  ; 確認目前蛇的方向 (d="w")
+	   77
+ 00000189  74 0B			 JE case1                    ; 方向水平遇到 WS 改變方向為垂直
+ 0000018B  80 3D 00000E24 R	     CMP d, 's'                  ;      (d="s")
+	   73
+ 00000192  74 02		     JE case1                    ;   方向水平遇到 WS 改變方向為垂直
+ 00000194  EB 1E		     JMP case2                   ; 方向垂直接跳CASE2
+				                                            
+ 00000196			      case1:
+ 00000196  80 FA 25		                    CMP DL, 25h             ; 左陣列輸入  (DL=25h)
+ 00000199  74 07		                    JE case11               ;  跳CASE11
+ 0000019B  80 FA 27		                    CMP DL, 27h             ; 右邊陣列輸入 (DL=27h)
+ 0000019E  74 0B		                    JE case12               ;跳CASE 12   
+ 000001A0  EB 30		                    JMP SkipEvent           ; 如果是上下陣列輸入 不用改變方向  依樣在more這回圈執行
+ 000001A2			      case11:
+ 000001A2  C6 05 00000E25 R	                    MOV newD, 'a'       ; 設定新方向 a  為左
+	   61
+ 000001A9  EB 27		                    JMP SkipEvent
+ 000001AB				  case12:
+ 000001AB  C6 05 00000E25 R	                    MOV newD, 'd'       ; 設定新方向d 為右
+	   64
+ 000001B2  EB 1E		                    JMP SkipEvent        ;跳回more迴圈
+
+ 000001B4			      case2:
+ 000001B4  80 FA 26		                    CMP DL, 26h             ; 上陣列輸入 (DL=26h)
+ 000001B7  74 07		                    JE case21               ;跳case21      
+ 000001B9  80 FA 28		                    CMP DL, 28h             ; 下陣列輸入 (DL=28h)
+ 000001BC  74 0B		                    JE case22               ;跳cace22
+ 000001BE  EB 12		                    JMP SkipEvent           ; 若為左右輸入 繼續在more迴圈跑
+				                  
+ 000001C0				  case21:
+ 000001C0  C6 05 00000E25 R	                    MOV newD, 'w'       ; 設定新方向往上
+	   77
+ 000001C7  EB 09		                    JMP SkipEvent       ;繼續跳回more迴圈跑 
+ 000001C9			      case22:
+ 000001C9  C6 05 00000E25 R	                    MOV newD, 's'       ; 設定新方向往下
+	   73
+ 000001D0  EB 00		                    JMP SkipEvent       ;繼續跳回more迴圈跑
+
+ 000001D2			    SkipEvent:    ;繼續跳回more 迴圈的 local 變數    
+ 000001D2  E9 FFFFFF52			JMP more                            ; 跳到more
+
+ 000001D7			    done:         ;轉變蛇體方向的 local 變數
+ 000001D7  8A 1D 00000E25 R	        MOV BL, newD                        ; 新方向newD 存放入BL暫存                                           
+ 000001DD  88 1D 00000E24 R	        MOV d, BL                           ;讀取BL 變成現有方向 d 
+ 000001E3  E8 0000001D		        CALL MoveSnake                      ; 呼叫副程式  movesnake 告知現在的方向
+ 000001E8  A1 00000E26 R	        MOV EAX, DelTime                    ; 移出暫存給 DelTime
+ 000001ED  E8 00000000 E	        CALL Delay                          ; 移動速度設定  呼叫 Delay
+ 000001F2  80 3D 00000E1F R	        CMP eGame, 1                        ; 結束標籤設定1  (eGame=1)
+	   01
+ 000001F9  74 05		        JE quit                             ; 跳出迴圈
+ 000001FB  E9 FFFFFF29		       JMP more                            ; 跳回more 迴圈
+
+ 00000200			    quit:                                  ;跳出 副程式   local 變數
+				    RET              ;回傳startgame的值   
+					
+ 00000205			startGame ENDP   ;遊戲開始 副程式結束
+				;---------------------------------------------------------------------------------------
+ 00000205			MoveSnake PROC USES EBX EDX      ;蛇體移動副程式  使用EBX EDX
+
+ 00000207  80 3D 00000E1C R	        CMP eTail, 1            ; 去除走過尾八 標籤
+	   01
+ 0000020E  0F 85 00000110	        JNE NoETail             ; 如果沒標籤不要去除尾八 跳到 noetail
+ 00000214  8A 35 00000E10 R	        MOV DH, tailR          ;  把蛇尾row 指標給DH
+ 0000021A  8A 15 00000E11 R	        MOV DL, tailC          ;  DL把蛇尾column 指標給DH
+ 00000220  E8 000003BD		        CALL accessIndex    ;  呼叫accessindex 副程式 給DH DL指標
+ 00000225  66| 4B		        DEC BX              ;  把值給BX 產生蛇體往前的下一個片段
+ 00000227  66| 89 1D		        MOV search, BX      ; BX   複製BX的值給下一個蛇體的片段
+	   00000E1D R
+ 0000022E  66| BB 0000		        MOV BX, 0           ;  BX為 0 呼叫 saveindex 副程式
+ 00000232  E8 000003D4		        CALL saveIndex      ; 把資料存進saveindex
+ 00000237  E8 00000000 E	        CALL GotoXY         ; invrine作者提公 清除非蛇體 ，蛇尾後走過的 螢幕顏色 
+ 0000023C  B8 0000000F		        MOV EAX, white + (black * 16)
+ 00000241  E8 00000000 E	        CALL SetTextColor   ;呼叫副程式 settextcolor 顏色設定副程式
+ 00000246  B0 20		        MOV AL, ' '          ; 空值  舍體走過處不上色
+ 00000248  E8 00000000 E	        CALL WriteChar       ;invrine 提供 讓一個單獨字元可標準輸出
+ 0000024D  52			        PUSH EDX            ; 放入EDX暫存中  
+ 0000024E  B2 4A		        MOV DL, 74
+ 00000250  B6 17		        MOV DH, 23         
+ 00000252  E8 00000000 E	        CALL GotoXY          ;invrine作者提公 清除非蛇體 ，蛇尾後走過的 螢幕顏色 
+ 00000257  5A			        POP EDX
+ 00000258  8A C6		        MOV AL, DH          ; 讀出DH  tail row 值 到AL
+ 0000025A  FE C8		        DEC AL              ;    (上)
+ 0000025C  A2 00000E18 R	        MOV Up, AL          ; 把AL 值取出存入up
+ 00000261  04 02		        ADD AL, 2           ;    (下)
+ 00000263  A2 00000E1A R	        MOV Dn, AL          ; 把AL 值取出存入down
+ 00000268  8A C2		        MOV AL, DL          ; 讀取DL tail column 直到AL
+ 0000026A  FE C8		        DEC AL              ; (左)
+ 0000026C  A2 00000E19 R	        MOV Lf, AL          ; 把AL值取出給 lift
+ 00000271  04 02		        ADD AL, 2           ; (右)
+ 00000273  A2 00000E1B R	        MOV Ri, AL          ; 把AL 值取出給right
+ 00000278  80 3D 00000E1A R	        CMP Dn, 24          ; Down 超出24 row 範圍
+	   18
+ 0000027F  75 07		        JNE next1           ; 跳 next 1 變數   
+ 00000281  C6 05 00000E1A R	            MOV Dn, 0       ; 
+	   00
+
+ 00000288			     next1:
+ 00000288  80 3D 00000E1B R	        CMP Ri, 74          ; right超出74 範圍(cP不等於74)
+	   4A
+ 0000028F  75 07		        JNE next2           ;跳next 2 變數
+ 00000291  C6 05 00000E1B R	            MOV Ri, 0       ; 
+	   00
+ 00000298			     next2:
+ 00000298  80 3D 00000E18 R	        CMP Up, 0           ;up(上標籤) > 0 
+	   00
+ 0000029F  7D 07		        JGE next3           ;跳 next 3變數 
+ 000002A1  C6 05 00000E18 R	            MOV Up, 23      ; 
+	   17
+ 000002A8			     next3:
+ 000002A8  80 3D 00000E19 R	        CMP Lf, 0            ;lift(左標籤) > 0
+	   00
+ 000002AF  7D 07		        JGE next4          
+ 000002B1  C6 05 00000E19 R	            MOV Lf, 73      
+	   49
+ 000002B8			     next4:
+ 000002B8  8A 35 00000E18 R	        MOV DH, Up          ;  up(上標籤)值傳給DH (row)
+ 000002BE  8A 15 00000E11 R	        MOV DL, tailC          ;    DL tC(蛇尾cloum)值傳給 DL (coloum)
+ 000002C4  E8 00000319		        CALL accessIndex    ;   呼叫 accessindex 通行標籤副程式
+ 000002C9  66| 3B 1D		        CMP BX, search      ; BX不等於serch
+	   00000E1D R
+ 000002D0  75 08		        JNE melseif1        ;跳到 melseif 變數
+ 000002D2  88 35 00000E10 R	            MOV tailR, DH      ;移動tR(蛇尾到DH) 
+ 000002D8  EB 4A		            JMP mendoff      ;跳到mendoff標籤
+
+ 000002DA			     melseif1:           ;下的標籤 
+ 000002DA  8A 35 00000E1A R	        MOV DH, Dn          ; 
+ 000002E0  E8 000002FD		        CALL accessIndex    ; 
+ 000002E5  66| 3B 1D		        CMP BX, search      ; BX不等於serch
+	   00000E1D R
+ 000002EC  75 08		        JNE melseif2
+ 000002EE  88 35 00000E10 R	        MOV tailR, DH           ; 
+ 000002F4  EB 2E		        JMP mendoff        ; 跳出迴圈的標籤
+
+ 000002F6			     melseif2:           ;左的標籤
+ 000002F6  8A 35 00000E10 R	        MOV DH, tailR          ; tailR(蛇尾row值)給DH
+ 000002FC  8A 15 00000E19 R	        MOV DL, Lf          ; lift(當前column左邊)值給DL
+ 00000302  E8 000002DB		        CALL accessIndex    ; 呼叫accessindex 副程式 把上面的東西放入 accessindex
+ 00000307  66| 3B 1D		        CMP BX, search      
+	   00000E1D R
+ 0000030E  75 08		        JNE melse           ;跳下一個melse 右標籤 
+ 00000310  88 15 00000E11 R	        MOV tailC, DL      ; tC(蛇體colunm)值 給DL
+ 00000316  EB 0C		        JMP mendoff          ;跳出迴圈的標籤
+
+ 00000318			    melse:              ;右的標籤  
+ 00000318  8A 15 00000E1B R	        MOV DL, Ri      ; right (colunm 右)
+ 0000031E  88 15 00000E11 R	        MOV tailC, DL      ;tC (蛇體cloum)   
+
+ 00000324			    mendoff:             ;跳出迴圈標籤 
+
+ 00000324			    NoETail:
+ 00000324  C6 05 00000E1C R	        MOV eTail, 1            ;  設定清除尾巴標籤
+	   01
+ 0000032B  8A 35 00000E10 R	        MOV DH, tailR              ;  複製row指標tR 給DH
+ 00000331  8A 15 00000E11 R	        MOV DL, tailC              ; 複製column指標tR 給DL
+ 00000337  88 35 00000E16 R	        MOV tmpR, DH            ; 複製DH值至tmpR 暫存記憶體中
+ 0000033D  88 15 00000E17 R	        MOV tmpC, DL            ; 複製DL值至tmpR 暫存記憶體中
+
+ 00000343			    whileTrue:              ; 若為真 蛇體無窮迴圈
+ 00000343  8A 35 00000E16 R	        MOV DH, tmpR        ; 當前 temR row指標 存至DH
+ 00000349  8A 15 00000E17 R	        MOV DL, tmpC        ; 當前 temC colunm指標 存至DL
+ 0000034F  E8 0000028E		        CALL accessIndex    ; 呼叫 accessindex副程式 
+ 00000354  66| 4B		        DEC BX              ;
+ 00000356  66| 89 1D		        MOV search, BX      ; BX下個蛇體片段值給search
+	   00000E1D R
+ 0000035D  53			        PUSH EBX            ; 值stack 放入 EBX  後進先出
+ 0000035E  66| 83 C3 02		        ADD BX, 2           ; 
+ 00000362  E8 000002A4		        CALL saveIndex      ;  呼叫副程式  蛇動 蛇體片段就跟著動
+ 00000367  5B			        POP EBX
+ 00000368  66| 83 FB 00		        CMP BX, 0           ; BX 0  就是蛇頭0
+ 0000036C  0F 84 000000D1	        JE break            ; 跳至結束迴圈標籤
+ 00000372  8A C6		        MOV AL, DH          ; DH值給AL
+ 00000374  FE C8		        DEC AL              ; AL row 上面值
+ 00000376  A2 00000E18 R	        MOV Up, AL          ; AL 存給Up(row上面值)
+ 0000037B  04 02		        ADD AL, 2           ; AL 下面值
+ 0000037D  A2 00000E1A R	        MOV Dn, AL          ; AL 存給down(row下面值)
+ 00000382  8A C2		        MOV AL, DL          ; 
+ 00000384  FE C8		        DEC AL              ; 左
+ 00000386  A2 00000E19 R	        MOV Lf, AL          ; 左
+ 0000038B  04 02		        ADD AL, 2           ; 右
+ 0000038D  A2 00000E1B R	        MOV Ri, AL          ; 右
+ 00000392  80 3D 00000E1A R	        CMP Dn, 24          ; 超出24 (下)
+	   18
+ 00000399  75 07		        JNE next21          ;跳到next21
+ 0000039B  C6 05 00000E1A R	        MOV Dn, 0       ; 清除走過的螢幕顯示
+	   00
+
+ 000003A2			     next21:
+ 000003A2  80 3D 00000E1B R	       CMP Ri, 74         ; 超過74  (最大75) right不等於74
+	   4A
+ 000003A9  75 07		       JNE next22         ;跳到next22
+ 000003AB  C6 05 00000E1B R	       MOV Ri, 0       ; 清除走過的螢幕顯示
+	   00
+
+ 000003B2			     next22:              ;最大24
+ 000003B2  80 3D 00000E18 R	       CMP Up, 0           ;up >= 0
+	   00
+ 000003B9  7D 07		       JGE next23       ;跳next23
+ 000003BB  C6 05 00000E18 R	       MOV Up, 23      ; 清除走過23piexl
+	   17
+					   
+ 000003C2				 next23:           ;清除上一個走過的片段
+ 000003C2  80 3D 00000E19 R	       CMP Lf, 0           ; lift >=0
+	   00
+ 000003C9  7D 07		       JGE next24      ;跳24    
+ 000003CB  C6 05 00000E19 R	       MOV Lf, 73     ; 清除走過73 piexl
+	   49
+
+ 000003D2			     next24:               ;      繼續望下一個片段移動標籤
+ 000003D2  8A 35 00000E18 R	       MOV DH, Up          ; 把up 值給 DH(row index)
+ 000003D8  8A 15 00000E17 R	       MOV DL, tmpC        ; 把colunm片段pixel(蛇體) 存入DL
+ 000003DE  E8 000001FF		       CALL accessIndex    ; 呼叫副程式 把值給accessindex
+ 000003E3  66| 3B 1D		       CMP BX, search      ; BX不等於search
+	   00000E1D R
+ 000003EA  75 08		       JNE elseif21        ;跳elseif2-1
+ 000003EC  88 35 00000E16 R	       MOV tmpR, DH    ; 移動下一格片段   DH 值給tmpR
+ 000003F2  EB 4A		       JMP endif2        ;跳endif2   (繼續在whileture 迴圈跑)
+
+ 000003F4			     elseif21:         
+ 000003F4  8A 35 00000E1A R	       MOV DH, Dn          ;  (row pixel值rD) 給DH
+ 000003FA  E8 000001E3		       CALL accessIndex    ;  呼叫副程式 accessindex 存入
+ 000003FF  66| 3B 1D		       CMP BX, search      ; BX不等於 search  
+	   00000E1D R
+ 00000406  75 08		       JNE elseif22         ;跳到elseif22 副程式
+ 00000408  88 35 00000E16 R	       MOV tmpR, DH    ;  繼續新的位置  DH 值給tmpR
+ 0000040E  EB 2E		       JMP endif2      ;跳endif2   (繼續在whileture 迴圈跑)
+
+ 00000410			     elseif22:
+ 00000410  8A 35 00000E16 R	        MOV DH, tmpR        ;  DH row pixel 左片段給DH
+ 00000416  8A 15 00000E19 R	        MOV DL, Lf          ;  colunm pixel 左片段給DL
+ 0000041C  E8 000001C1		        CALL accessIndex    ; 呼叫副程式 accessindex 存入
+ 00000421  66| 3B 1D		        CMP BX, search      ;  BX不等於search  
+	   00000E1D R
+ 00000428  75 08		        JNE else2           ;跳 else2 給右邊值          
+ 0000042A  88 15 00000E17 R	        MOV tmpC, DL    ;  往右移動 DL值給tmpC 顯示在螢幕上
+ 00000430  EB 0C				JMP endif2         ;跳endif2   (繼續在whileture 迴圈跑)
+
+ 00000432			      else2:
+ 00000432  8A 15 00000E1B R	            MOV DL, Ri      ; right 往右值 給DL
+ 00000438  88 15 00000E17 R	            MOV tmpC, DL    ; DL 給 tmpC(暫存顯示)
+
+ 0000043E			      endif2:
+ 0000043E  E9 FFFFFF00		        JMP whileTrue       ;繼續在whileTure 迴圈跑  值到頭碰尾
+
+ 00000443			    break:                  ;終止條件 標籤
+ 00000443  A0 00000E12 R	      MOV AL, headR              ; hR (蛇體'row)值 給AL
+ 00000448  FE C8		      DEC AL                  ; AL取值
+ 0000044A  A2 00000E18 R	      MOV Up, AL              ; AL值存入up(row上值減少)
+ 0000044F  04 02		      ADD AL, 2               ; AL 2 取下一個值
+ 00000451  A2 00000E1A R	      MOV Dn, AL              ; AL值存入down(蛇下row 往下加)
+ 00000456  A0 00000E13 R	      MOV AL, headC              ; hC (蛇體clunm)值 給AL
+ 0000045B  FE C8		      DEC AL                  ; column AL取值
+ 0000045D  A2 00000E19 R	      MOV Lf, AL              ; AL值存入lift(colum左邊值 減少)
+ 00000462  04 02		      ADD AL, 2               ;  AL 2 取下一個值
+ 00000464  A2 00000E1B R	      MOV Ri, AL              ; AL值存入right(colum右邊值 增加)
+ 00000469  80 3D 00000E1A R	      CMP Dn, 24              ; 確認24 邊界 down不等於24
+	   18
+ 00000470  75 07		      JNE next31              ;超過24 跳 next 31  
+ 00000472  C6 05 00000E1A R	      MOV Dn, 0           ; 清除rP
+	   00
+
+ 00000479			    next31:
+ 00000479  80 3D 00000E1B R	      CMP Ri, 74              ; 確認74邊界 right不等於74
+	   4A
+ 00000480  75 07		      JNE next32              ;超過跳next32 
+ 00000482  C6 05 00000E1B R	      MOV Ri, 0           ; 清除cP
+	   00
+
+ 00000489			   next32:
+ 00000489  80 3D 00000E18 R	    CMP Up, 0               ; up>=0
+	   00
+ 00000490  7D 07		    JGE next33              ;跳next 33
+ 00000492  C6 05 00000E18 R	    MOV Up, 23          ; up移到23
+	   17
+
+ 00000499			   next33:
+ 00000499  80 3D 00000E19 R	    CMP Lf, 0               ; lift>=0
+	   00
+ 000004A0  7D 07		    JGE next34               ;跳next34  
+ 000004A2  C6 05 00000E19 R	        MOV Lf, 73          ;lift移至73
+	   49
+
+ 000004A9			    next34:                 ;總結上面走過的 把值存給DH DL
+ 000004A9  80 3D 00000E24 R	    CMP d, 'w'              ; 上"w" d不是"w"
+	   77
+ 000004B0  75 0C		    JNE elseif3             ;跳 elseif3
+ 000004B2  A0 00000E18 R	        MOV AL, Up          ; row 頭放入新位置 up值給AL
+ 000004B7  A2 00000E12 R	        MOV headR, AL          ; AL 給 hR 
+ 000004BC  EB 34		        JMP endif3          ;存值給 DH DL
+
+ 000004BE			    elseif3:
+ 000004BE  80 3D 00000E24 R	    CMP d, 's'              ; 下"s"   d不是"s"
+	   73
+ 000004C5  75 0C		    JNE elseif32            ; 跳 elseif32 
+ 000004C7  A0 00000E1A R	        MOV AL, Dn          ; 
+ 000004CC  A2 00000E12 R	        MOV headR, AL          ; 
+ 000004D1  EB 1F		        JMP endif3          ;存值給 DH DL
+
+ 000004D3			    elseif32:
+ 000004D3  80 3D 00000E24 R	    CMP d, 'a'              ; 左"a"  d不是"a"
+	   61
+ 000004DA  75 0C		    JNE else3
+ 000004DC  A0 00000E19 R	        MOV AL, Lf          ; 
+ 000004E1  A2 00000E13 R	        MOV headC, AL          ; 存值給 DH DL
+ 000004E6  EB 0A		        JMP endif3
+
+ 000004E8			    else3:                  ;右 
+ 000004E8  A0 00000E1B R	        MOV AL, Ri           
+ 000004ED  A2 00000E13 R	        MOV headC, AL          
+
+ 000004F2			    endif3:                 ;存值 給DH DL
+ 000004F2  8A 35 00000E12 R	    MOV DH, headR              ; 新row 頭
+ 000004F8  8A 15 00000E13 R	    MOV DL, headC              ; 新col頭
+ 000004FE  E8 000000DF		    CALL accessIndex        ; 呼叫副程式 accessindex 把DH DL 值存入
+ 00000503  66| 83 FB 00		    CMP BX, 0               ; BX= 0
+ 00000507  74 1D		    JE NoHit                ; 跳nohit
+ 00000509  B6 18		    MOV DH, 24              ; 
+ 0000050B  B2 0B		    MOV DL, 11              ; 
+ 0000050D  E8 00000000 E	    CALL GotoXY              ;作者函數提供
+ 00000512  E8 00000000 E	    CALL WriteString         ;作者函數提供
+ 00000517  E8 00000000 E	    CALL Delay              ; 作者函數提供 延緩
+ 0000051C  C6 05 00000E1F R	    MOV eGame, 1            ; eGame 標籤1 遊戲結束
+	   01
+				    RET                     ; 
+
+ 00000526			 NoHit:                     ; 沒吃到食物標籤設定
+ 00000526  66| BB 0001		    MOV BX, 1               ; 
+ 0000052A  E8 000000DC		    CALL saveIndex          ; 
+ 0000052F  8A 0D 00000E15 R	    MOV cl, foodC              ; 食物 col (cl記憶體)
+ 00000535  8A 2D 00000E14 R	    MOV ch, foodR              ; 食物 row (ch記憶體)
+ 0000053B  3A CA		    CMP cl, DL              ; 比較 蛇頭 column 和食物 column (c1不等於DL)
+ 0000053D  75 35		    JNE foodNotGobbled      ;跳(foodnotgobbled)沒吃到食物
+ 0000053F  3A EE		    CMP ch, DH              ; 比較 蛇頭 row 和食物 row    (ch不等於DH)
+ 00000541  75 31		    JNE foodNotGobbled      ;跳(foodnotgobbled)沒吃到食物
+ 00000543  E8 0000004E		    CALL createFood         ; 食物被吃  呼叫 careatefood副程式
+ 00000548  C6 05 00000E1C R	    MOV eTail, 0            ;                           
+	   00
+ 0000054F  B8 0000000F			MOV EAX, white + (black * 16)  ;設定顏色
+ 00000554  E8 00000000 E	    CALL SetTextColor       ;作者提供
+ 00000559  52			    PUSH EDX                ; Push EDX onto stack
+ 0000055A  B6 18		    MOV DH, 24              ; 分數落點處
+ 0000055C  B2 07		    MOV DL, 7               ;分數落點處         
+ 0000055E  E8 00000000 E	    CALL GotoXY             ;作者提供
+ 00000563  A1 00000E20 R	    MOV EAX, cScore         ; 分數計算  
+ 00000568  40			    INC EAX
+ 00000569  E8 00000000 E	    CALL WriteDec
+ 0000056E  A3 00000E20 R	    MOV cScore, EAX         ; 更新分數計算
+ 00000573  5A			    POP EDX                 ; Pop EDX off of stack
+
+ 00000574			    foodNotGobbled:         ; 沒吃到食物標籤
+ 00000574  E8 00000000 E	    CALL GotoXY             ; 作者提供  
+ 00000579  B8 000000F1		    MOV EAX, blue + (white * 16)
+ 0000057E  E8 00000000 E	    CALL setTextColor       ;
+ 00000583  B0 20		    MOV AL, ' '             ;
+ 00000585  E8 00000000 E	    CALL WriteChar           ;
+ 0000058A  B6 18		    MOV DH, 24             ; DH 24  這樣就永遠不會撞牆
+ 0000058C  B2 4A		    MOV DL, 74             ; DL 74  這樣就永不撞牆
+ 0000058E  E8 00000000 E	    CALL GotoXY
+				    RET                     
+ 00000596			MoveSnake ENDP             ;蛇體移動副程式結束
+				;---------------------------------------------------------------------------------------
+ 00000596			createFood PROC USES EAX EBX EDX
+ 00000599			 redo:                       ; 建立食物的標籤
+ 00000599  B8 00000014		    MOV EAX, 20                 ; 設定20 
+ 0000059E  E8 00000000 E	    CALL RandomRange            ; range 0 to numRows - 1  作者提供 隨機放
+ 000005A3  8A F0		    MOV DH, AL
+ 000005A5  B8 0000003C		    MOV EAX, 60                ; 設定60
+ 000005AA  E8 00000000 E	    CALL RandomRange            ; range 0 to numCol - 1 作者提供 隨機放
+ 000005AF  8A D0		    MOV DL, AL
+ 000005B1  E8 0000002C		    CALL accessIndex            ; 呼叫副程式 accessindex
+ 000005B6  66| 83 FB 00		    CMP BX, 0                   ; BX 0則
+ 000005BA  75 DD		    JNE redo                    ;跳回 redo
+ 000005BC  88 35 00000E14 R	    MOV foodR, DH                  ; 設定食物row值
+ 000005C2  88 15 00000E15 R	    MOV foodC, DL                  ; 設定食物col值
+ 000005C8  B8 0000003F		    MOV EAX, white + (cyan * 16); 食物顏色設定
+ 000005CD  E8 00000000 E	    CALL setTextColor           ;作者提供
+ 000005D2  E8 00000000 E	    CALL GotoXY                 ; 作者提供
+ 000005D7  B0 20		    MOV AL, ' '                 ; 
+ 000005D9  E8 00000000 E	    CALL WriteChar               ;作者提供
+				    RET
+ 000005E2			createFood ENDP
+				;---------------------------------------------------------------------------------------
+ 000005E2			accessIndex PROC USES EAX ESI EDX    ;DH  DL 中pixel回傳 framebuffer， value值 再回傳到BX暫存器  (取指標) 
+ 000005E5  8A DE		    MOV BL, DH      ; DH中row 的值傳給 BL
+ 000005E7  B0 4A		    MOV AL, 74    ; 74 最大
+ 000005E9  F6 E3		    MUL BL          ; 
+ 000005EB  66| 52		    PUSH DX         ; 放入DX
+ 000005ED  B6 00		    MOV DH, 0       ; DH 清空
+ 000005EF  66| 03 C2		    ADD AX, DX      ; 增加AX 取DX位置
+ 000005F2  66| 5A		    POP DX          ; DX 取出 
+ 000005F4  BE 00000000		    MOV ESI, 0      ; ESI 暫存器 清空
+ 000005F9  66| 8B F0			MOV SI, AX      ; AX暫存器傳給SI指標值
+ 000005FC  66| D1 E6		    SHL SI, 1       ; SI 指標 標籤
+ 000005FF  66| 8B 1C 35		    MOV BX, A[SI]   ; A[SI] 陣列中 指給BX
+	   00000000 R
+				    RET
+ 0000060B			accessIndex ENDP    
+				;---------------------------------------------------------------------------------------
+ 0000060B			saveIndex PROC USES EAX ESI EDX    ;DH DL 存址處 EAX  ESI EDX   使用stack 方式   (存指標)
+ 0000060E  53			    PUSH EBX        ; 
+ 0000060F  8A DE		    MOV BL, DH      ; 
+ 00000611  B0 4A		    MOV AL, 74      ; 
+ 00000613  F6 E3		    MUL BL          ; 
+ 00000615  66| 52		    PUSH DX         ; 
+ 00000617  B6 00		    MOV DH, 0       ; 
+ 00000619  66| 03 C2		    ADD AX, DX      ; 
+ 0000061C  66| 5A		    POP DX          ; 
+ 0000061E  BE 00000000		    MOV ESI, 0      ; 
+ 00000623  66| 8B F0		    MOV SI, AX      ; 
+ 00000626  5B			    POP EBX         ; 
+ 00000627  66| D1 E6		    SHL SI, 1       ; 
+ 0000062A  66| 89 1C 35		    MOV A[SI], BX   ;  存BX直到A[SI] 陣列中
+	   00000000 R
+				    RET
+ 00000636			saveIndex ENDP
+				;---------------------------------------------------------------------------------------
+ 00000636			Paint PROC USES EAX EDX EBX ESI     ;上色副程式
+ 0000063A  B8 000000F1		   MOV EAX, blue + (white * 16)   
+ 0000063F  E8 00000000 E	   CALL SetTextColor
+ 00000644  B6 00		   MOV DH, 0                          
+				 RET
+ 0000064B			Paint ENDP
+				;---------------------------------------------------------------------------------------
+				END main
+Microsoft (R) Macro Assembler Version 14.16.27024.1	    01/09/19 11:13:28
+	Snake.as					     Symbols 2 - 1
+
+
+
+
+Structures and Unions:
+
+                N a m e                  Size
+                                         Offset      Type
+
+CONSOLE_CURSOR_INFO  . . . . . .	 00000008
+  dwSize . . . . . . . . . . . .	 00000000	 DWord
+  bVisible . . . . . . . . . . .	 00000004	 DWord
+CONSOLE_SCREEN_BUFFER_INFO . . .	 00000016
+  dwSize . . . . . . . . . . . .	 00000000	 DWord
+  dwCursorPosition . . . . . . .	 00000004	 DWord
+  wAttributes  . . . . . . . . .	 00000008	 Word
+  srWindow . . . . . . . . . . .	 0000000A	 QWord
+  dwMaximumWindowSize  . . . . .	 00000012	 DWord
+COORD  . . . . . . . . . . . . .	 00000004
+  X  . . . . . . . . . . . . . .	 00000000	 Word
+  Y  . . . . . . . . . . . . . .	 00000002	 Word
+FILETIME . . . . . . . . . . . .	 00000008
+  loDateTime . . . . . . . . . .	 00000000	 DWord
+  hiDateTime . . . . . . . . . .	 00000004	 DWord
+FOCUS_EVENT_RECORD . . . . . . .	 00000004
+  bSetFocus  . . . . . . . . . .	 00000000	 DWord
+FPU_ENVIRON  . . . . . . . . . .	 0000001C
+  controlWord  . . . . . . . . .	 00000000	 Word
+  statusWord . . . . . . . . . .	 00000004	 Word
+  tagWord  . . . . . . . . . . .	 00000008	 Word
+  instrPointerOffset . . . . . .	 0000000C	 DWord
+  instrPointerSelector . . . . .	 00000010	 DWord
+  operandPointerOffset . . . . .	 00000014	 DWord
+  operandPointerSelector . . . .	 00000018	 Word
+INPUT_RECORD . . . . . . . . . .	 00000014
+  EventType  . . . . . . . . . .	 00000000	 Word
+  Event  . . . . . . . . . . . .	 00000004	 XmmWord
+  bKeyDown . . . . . . . . . . .	 00000000	 DWord
+  wRepeatCount . . . . . . . . .	 00000004	 Word
+  wVirtualKeyCode  . . . . . . .	 00000006	 Word
+  wVirtualScanCode . . . . . . .	 00000008	 Word
+  uChar  . . . . . . . . . . . .	 0000000A	 Word
+  UnicodeChar  . . . . . . . . .	 00000000	 Word
+  AsciiChar  . . . . . . . . . .	 00000000	 Byte
+  dwControlKeyState  . . . . . .	 0000000C	 DWord
+  dwMousePosition  . . . . . . .	 00000000	 DWord
+  dwButtonState  . . . . . . . .	 00000004	 DWord
+  dwMouseControlKeyState . . . .	 00000008	 DWord
+  dwEventFlags . . . . . . . . .	 0000000C	 DWord
+  dwSize . . . . . . . . . . . .	 00000000	 DWord
+  dwCommandId  . . . . . . . . .	 00000000	 DWord
+  bSetFocus  . . . . . . . . . .	 00000000	 DWord
+KEY_EVENT_RECORD . . . . . . . .	 00000010
+  bKeyDown . . . . . . . . . . .	 00000000	 DWord
+  wRepeatCount . . . . . . . . .	 00000004	 Word
+  wVirtualKeyCode  . . . . . . .	 00000006	 Word
+  wVirtualScanCode . . . . . . .	 00000008	 Word
+  uChar  . . . . . . . . . . . .	 0000000A	 Word
+  UnicodeChar  . . . . . . . . .	 00000000	 Word
+  AsciiChar  . . . . . . . . . .	 00000000	 Byte
+  dwControlKeyState  . . . . . .	 0000000C	 DWord
+MENU_EVENT_RECORD  . . . . . . .	 00000004
+  dwCommandId  . . . . . . . . .	 00000000	 DWord
+MOUSE_EVENT_RECORD . . . . . . .	 00000010
+  dwMousePosition  . . . . . . .	 00000000	 DWord
+  dwButtonState  . . . . . . . .	 00000004	 DWord
+  dwMouseControlKeyState . . . .	 00000008	 DWord
+  dwEventFlags . . . . . . . . .	 0000000C	 DWord
+SMALL_RECT . . . . . . . . . . .	 00000008
+  Left . . . . . . . . . . . . .	 00000000	 Word
+  Top  . . . . . . . . . . . . .	 00000002	 Word
+  Right  . . . . . . . . . . . .	 00000004	 Word
+  Bottom . . . . . . . . . . . .	 00000006	 Word
+SYSTEMTIME . . . . . . . . . . .	 00000010
+  wYear  . . . . . . . . . . . .	 00000000	 Word
+  wMonth . . . . . . . . . . . .	 00000002	 Word
+  wDayOfWeek . . . . . . . . . .	 00000004	 Word
+  wDay . . . . . . . . . . . . .	 00000006	 Word
+  wHour  . . . . . . . . . . . .	 00000008	 Word
+  wMinute  . . . . . . . . . . .	 0000000A	 Word
+  wSecond  . . . . . . . . . . .	 0000000C	 Word
+  wMilliseconds  . . . . . . . .	 0000000E	 Word
+WINDOW_BUFFER_SIZE_RECORD  . . .	 00000004
+  dwSize . . . . . . . . . . . .	 00000000	 DWord
+
+
+Segments and Groups:
+
+                N a m e                 Size     Length   Align   Combine Class
+
+FLAT . . . . . . . . . . . . . .	GROUP
+STACK  . . . . . . . . . . . . .	32 Bit	 00001000 Para	  Stack	  'STACK'	 
+_DATA  . . . . . . . . . . . . .	32 Bit	 00000E6C Para	  Public  'DATA'	
+_TEXT  . . . . . . . . . . . . .	32 Bit	 0000064B Para	  Public  'CODE'	
+
+
+Procedures, parameters, and locals:
+
+                N a m e                 Type     Value    Attr
+
+CloseFile  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+CloseHandle  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+Clrscr . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+CreateFileA  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+CreateOutputFile . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+Crlf . . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+Delay  . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+DumpMem  . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+DumpRegs . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+ExitProcess  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+FileTimeToDosDateTime  . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+FileTimeToSystemTime . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+FlushConsoleInputBuffer  . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+FormatMessageA . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetCommandLineA  . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetCommandTail . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetConsoleCP . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetConsoleCursorInfo . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetConsoleMode . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetConsoleScreenBufferInfo . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetDateTime  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetFileTime  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetKeyState  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetLastError . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetLocalTime . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetMaxXY . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetMseconds  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetNumberOfConsoleInputEvents  .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetProcessHeap . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetStdHandle . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetSystemTime  . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetTextColor . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetTickCount . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+Gotoxy . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+HeapAlloc  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+HeapCreate . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+HeapDestroy  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+HeapFree . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+HeapSize . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+IsDigit  . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+LocalFree  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+MessageBoxA  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+MoveSnake  . . . . . . . . . . .	P Near	 00000205 _TEXT	Length= 00000391 Public STDCALL
+  next1  . . . . . . . . . . . .	L Near	 00000288 _TEXT	
+  next2  . . . . . . . . . . . .	L Near	 00000298 _TEXT	
+  next3  . . . . . . . . . . . .	L Near	 000002A8 _TEXT	
+  next4  . . . . . . . . . . . .	L Near	 000002B8 _TEXT	
+  melseif1 . . . . . . . . . . .	L Near	 000002DA _TEXT	
+  melseif2 . . . . . . . . . . .	L Near	 000002F6 _TEXT	
+  melse  . . . . . . . . . . . .	L Near	 00000318 _TEXT	
+  mendoff  . . . . . . . . . . .	L Near	 00000324 _TEXT	
+  NoETail  . . . . . . . . . . .	L Near	 00000324 _TEXT	
+  whileTrue  . . . . . . . . . .	L Near	 00000343 _TEXT	
+  next21 . . . . . . . . . . . .	L Near	 000003A2 _TEXT	
+  next22 . . . . . . . . . . . .	L Near	 000003B2 _TEXT	
+  next23 . . . . . . . . . . . .	L Near	 000003C2 _TEXT	
+  next24 . . . . . . . . . . . .	L Near	 000003D2 _TEXT	
+  elseif21 . . . . . . . . . . .	L Near	 000003F4 _TEXT	
+  elseif22 . . . . . . . . . . .	L Near	 00000410 _TEXT	
+  else2  . . . . . . . . . . . .	L Near	 00000432 _TEXT	
+  endif2 . . . . . . . . . . . .	L Near	 0000043E _TEXT	
+  break  . . . . . . . . . . . .	L Near	 00000443 _TEXT	
+  next31 . . . . . . . . . . . .	L Near	 00000479 _TEXT	
+  next32 . . . . . . . . . . . .	L Near	 00000489 _TEXT	
+  next33 . . . . . . . . . . . .	L Near	 00000499 _TEXT	
+  next34 . . . . . . . . . . . .	L Near	 000004A9 _TEXT	
+  elseif3  . . . . . . . . . . .	L Near	 000004BE _TEXT	
+  elseif32 . . . . . . . . . . .	L Near	 000004D3 _TEXT	
+  else3  . . . . . . . . . . . .	L Near	 000004E8 _TEXT	
+  endif3 . . . . . . . . . . . .	L Near	 000004F2 _TEXT	
+  NoHit  . . . . . . . . . . . .	L Near	 00000526 _TEXT	
+  foodNotGobbled . . . . . . . .	L Near	 00000574 _TEXT	
+MsgBoxAsk  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+MsgBox . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+OpenInputFile  . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+Paint  . . . . . . . . . . . . .	P Near	 00000636 _TEXT	Length= 00000015 Public STDCALL
+ParseDecimal32 . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+ParseInteger32 . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+PeekConsoleInputA  . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+Random32 . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+RandomRange  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+Randomize  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+ReadChar . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+ReadConsoleA . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+ReadConsoleInputA  . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+ReadDec  . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+ReadFile . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+ReadFloat  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+ReadFromFile . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+ReadHex  . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+ReadInt  . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+ReadKeyFlush . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+ReadKey  . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+ReadString . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+SetConsoleCursorInfo . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+SetConsoleCursorPosition . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+SetConsoleMode . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+SetConsoleScreenBufferSize . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+SetConsoleTextAttribute  . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+SetConsoleTitleA . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+SetConsoleWindowInfo . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+SetFilePointer . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+SetLocalTime . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+SetTextColor . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+ShowFPUStack . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+Sleep  . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+StrLength  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+Str_compare  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+Str_copy . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+Str_length . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+Str_trim . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+Str_ucase  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+SystemTimeToFileTime . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+WaitMsg  . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+WriteBinB  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+WriteBin . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+WriteChar  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+WriteConsoleA  . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+WriteConsoleOutputAttribute  . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+WriteConsoleOutputCharacterA . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+WriteDec . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+WriteFile  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+WriteFloat . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+WriteHexB  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+WriteHex . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+WriteInt . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+WriteStackFrameName  . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+WriteStackFrame  . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+WriteString  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+WriteToFile  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+WriteWindowsMsg  . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+accessIndex  . . . . . . . . . .	P Near	 000005E2 _TEXT	Length= 00000029 Public STDCALL
+clearMem . . . . . . . . . . . .	P Near	 0000009F _TEXT	Length= 0000002A Public STDCALL
+  oLoop  . . . . . . . . . . . .	L Near	 000000A5 _TEXT	
+  iLoop  . . . . . . . . . . . .	L Near	 000000B3 _TEXT	
+  endILoop . . . . . . . . . . .	L Near	 000000C1 _TEXT	
+  endOLoop . . . . . . . . . . .	L Near	 000000C5 _TEXT	
+createFood . . . . . . . . . . .	P Near	 00000596 _TEXT	Length= 0000004C Public STDCALL
+  redo . . . . . . . . . . . . .	L Near	 00000599 _TEXT	
+initSnake  . . . . . . . . . . .	P Near	 0000004C _TEXT	Length= 00000053 Public STDCALL
+main . . . . . . . . . . . . . .	P Near	 00000000 _TEXT	Length= 0000004C Public STDCALL
+  menu . . . . . . . . . . . . .	L Near	 00000000 _TEXT	
+  wait1  . . . . . . . . . . . .	L Near	 00000014 _TEXT	
+  startG . . . . . . . . . . . .	L Near	 00000024 _TEXT	
+printf . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External C
+saveIndex  . . . . . . . . . . .	P Near	 0000060B _TEXT	Length= 0000002B Public STDCALL
+scanf  . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External C
+startGame  . . . . . . . . . . .	P Near	 000000C9 _TEXT	Length= 0000013C Public STDCALL
+  more . . . . . . . . . . . . .	L Near	 00000129 _TEXT	
+  case1  . . . . . . . . . . . .	L Near	 00000196 _TEXT	
+  case11 . . . . . . . . . . . .	L Near	 000001A2 _TEXT	
+  case12 . . . . . . . . . . . .	L Near	 000001AB _TEXT	
+  case2  . . . . . . . . . . . .	L Near	 000001B4 _TEXT	
+  case21 . . . . . . . . . . . .	L Near	 000001C0 _TEXT	
+  case22 . . . . . . . . . . . .	L Near	 000001C9 _TEXT	
+  SkipEvent  . . . . . . . . . .	L Near	 000001D2 _TEXT	
+  done . . . . . . . . . . . . .	L Near	 000001D7 _TEXT	
+  quit . . . . . . . . . . . . .	L Near	 00000200 _TEXT	
+wsprintfA  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External C
+
+
+Symbols:
+
+                N a m e                 Type     Value    Attr
+
+@CodeSize  . . . . . . . . . . .	Number	 00000000h   
+@DataSize  . . . . . . . . . . .	Number	 00000000h   
+@Interface . . . . . . . . . . .	Number	 00000003h   
+@Model . . . . . . . . . . . . .	Number	 00000007h   
+@code  . . . . . . . . . . . . .	Text   	 _TEXT
+@data  . . . . . . . . . . . . .	Text   	 FLAT
+@fardata?  . . . . . . . . . . .	Text   	 FLAT
+@fardata . . . . . . . . . . . .	Text   	 FLAT
+@stack . . . . . . . . . . . . .	Text   	 FLAT
+ALT_MASK . . . . . . . . . . . .	Number	 00000003h   
+CAPSLOCK_ON  . . . . . . . . . .	Number	 00000080h   
+CREATE_ALWAYS  . . . . . . . . .	Number	 00000002h   
+CREATE_NEW . . . . . . . . . . .	Number	 00000001h   
+CTRL_MASK  . . . . . . . . . . .	Number	 0000000Ch   
+CreateFile . . . . . . . . . . .	Text   	 CreateFileA
+DO_NOT_SHARE . . . . . . . . . .	Number	 00000000h   
+Dn . . . . . . . . . . . . . . .	Byte	 00000E1A _DATA	
+ENABLE_ECHO_INPUT  . . . . . . .	Number	 00000004h   
+ENABLE_LINE_INPUT  . . . . . . .	Number	 00000002h   
+ENABLE_MOUSE_INPUT . . . . . . .	Number	 00000010h   
+ENABLE_PROCESSED_INPUT . . . . .	Number	 00000001h   
+ENABLE_PROCESSED_OUTPUT  . . . .	Number	 00000001h   
+ENABLE_WINDOW_INPUT  . . . . . .	Number	 00000008h   
+ENABLE_WRAP_AT_EOL_OUTPUT  . . .	Number	 00000002h   
+ENHANCED_KEY . . . . . . . . . .	Number	 00000100h   
+FALSE  . . . . . . . . . . . . .	Number	 00000000h   
+FILE_APPEND_DATA . . . . . . . .	Number	 00000004h   
+FILE_ATTRIBUTE_ARCHIVE . . . . .	Number	 00000020h   
+FILE_ATTRIBUTE_COMPRESSED  . . .	Number	 00000800h   
+FILE_ATTRIBUTE_DEVICE  . . . . .	Number	 00000040h   
+FILE_ATTRIBUTE_DIRECTORY . . . .	Number	 00000010h   
+FILE_ATTRIBUTE_ENCRYPTED . . . .	Number	 00004000h   
+FILE_ATTRIBUTE_HIDDEN  . . . . .	Number	 00000002h   
+FILE_ATTRIBUTE_NORMAL  . . . . .	Number	 00000080h   
+FILE_ATTRIBUTE_NOT_CONTENT_INDEXED .	Number	 00002000h   
+FILE_ATTRIBUTE_OFFLINE . . . . .	Number	 00001000h   
+FILE_ATTRIBUTE_READONLY  . . . .	Number	 00000001h   
+FILE_ATTRIBUTE_REPARSE_POINT . .	Number	 00000400h   
+FILE_ATTRIBUTE_SPARSE_FILE . . .	Number	 00000200h   
+FILE_ATTRIBUTE_SYSTEM  . . . . .	Number	 00000004h   
+FILE_ATTRIBUTE_TEMPORARY . . . .	Number	 00000100h   
+FILE_BEGIN . . . . . . . . . . .	Number	 00000000h   
+FILE_CURRENT . . . . . . . . . .	Number	 00000001h   
+FILE_DELETE_CHILD  . . . . . . .	Number	 00000040h   
+FILE_END . . . . . . . . . . . .	Number	 00000002h   
+FILE_READ_DATA . . . . . . . . .	Number	 00000001h   
+FILE_SHARE_DELETE  . . . . . . .	Number	 00000004h   
+FILE_SHARE_READ  . . . . . . . .	Number	 00000001h   
+FILE_SHARE_WRITE . . . . . . . .	Number	 00000002h   
+FILE_WRITE_DATA  . . . . . . . .	Number	 00000002h   
+FOCUS_EVENT  . . . . . . . . . .	Number	 00000010h   
+FORMAT_MESSAGE_ALLOCATE_BUFFER .	Number	 00000100h   
+FORMAT_MESSAGE_FROM_SYSTEM . . .	Number	 00001000h   
+FormatMessage  . . . . . . . . .	Text   	 FormatMessageA
+GENERIC_ALL  . . . . . . . . . .	Number	 10000000h   
+GENERIC_EXECUTE  . . . . . . . .	Number	 20000000h   
+GENERIC_READ . . . . . . . . . .	Number	 -80000000h   
+GENERIC_WRITE  . . . . . . . . .	Number	 40000000h   
+GetCommandLine . . . . . . . . .	Text   	 GetCommandLineA
+HANDLE . . . . . . . . . . . . .	Text   	 DWORD
+HEAP_GENERATE_EXCEPTIONS . . . .	Number	 00000004h   
+HEAP_GROWABLE  . . . . . . . . .	Number	 00000002h   
+HEAP_NO_SERIALIZE  . . . . . . .	Number	 00000001h   
+HEAP_REALLOC_IN_PLACE_ONLY . . .	Number	 00000010h   
+HEAP_ZERO_MEMORY . . . . . . . .	Number	 00000008h   
+IDABORT  . . . . . . . . . . . .	Number	 00000003h   
+IDCANCEL . . . . . . . . . . . .	Number	 00000002h   
+IDCLOSE  . . . . . . . . . . . .	Number	 00000008h   
+IDCONTINUE . . . . . . . . . . .	Number	 0000000Bh   
+IDHELP . . . . . . . . . . . . .	Number	 00000009h   
+IDIGNORE . . . . . . . . . . . .	Number	 00000005h   
+IDNO . . . . . . . . . . . . . .	Number	 00000007h   
+IDOK . . . . . . . . . . . . . .	Number	 00000001h   
+IDRETRY  . . . . . . . . . . . .	Number	 00000004h   
+IDTIMEOUT  . . . . . . . . . . .	Number	 00007D00h   
+IDTRYAGAIN . . . . . . . . . . .	Number	 0000000Ah   
+IDYES  . . . . . . . . . . . . .	Number	 00000006h   
+INVALID_HANDLE_VALUE . . . . . .	Number	 -00000001h   
+KBDOWN_FLAG  . . . . . . . . . .	Number	 00000001h   
+KEY_EVENT  . . . . . . . . . . .	Number	 00000001h   
+KEY_MASKS  . . . . . . . . . . .	Number	 0000001Fh   
+LEFT_ALT_PRESSED . . . . . . . .	Number	 00000002h   
+LEFT_CTRL_PRESSED  . . . . . . .	Number	 00000008h   
+Lf . . . . . . . . . . . . . . .	Byte	 00000E19 _DATA	
+MB_ABORTRETRYIGNORE  . . . . . .	Number	 00000002h   
+MB_APPLMODAL . . . . . . . . . .	Number	 00000000h   
+MB_CANCELTRYCONTINUE . . . . . .	Number	 00000006h   
+MB_DEFBUTTON1  . . . . . . . . .	Number	 00000000h   
+MB_DEFBUTTON2  . . . . . . . . .	Number	 00000100h   
+MB_DEFBUTTON3  . . . . . . . . .	Number	 00000200h   
+MB_DEFBUTTON4  . . . . . . . . .	Number	 00000300h   
+MB_HELP  . . . . . . . . . . . .	Number	 00004000h   
+MB_ICONASTERISK  . . . . . . . .	Number	 00000040h   
+MB_ICONERROR . . . . . . . . . .	Number	 00000010h   
+MB_ICONEXCLAMATION . . . . . . .	Number	 00000030h   
+MB_ICONHAND  . . . . . . . . . .	Number	 00000010h   
+MB_ICONINFORMATION . . . . . . .	Number	 00000040h   
+MB_ICONQUESTION  . . . . . . . .	Number	 00000020h   
+MB_ICONSTOP  . . . . . . . . . .	Number	 00000010h   
+MB_ICONWARNING . . . . . . . . .	Number	 00000030h   
+MB_OKCANCEL  . . . . . . . . . .	Number	 00000001h   
+MB_OK  . . . . . . . . . . . . .	Number	 00000000h   
+MB_RETRYCANCEL . . . . . . . . .	Number	 00000005h   
+MB_SYSTEMMODAL . . . . . . . . .	Number	 00001000h   
+MB_TASKMODAL . . . . . . . . . .	Number	 00002000h   
+MB_USERICON  . . . . . . . . . .	Number	 00000080h   
+MB_YESNOCANCEL . . . . . . . . .	Number	 00000003h   
+MB_YESNO . . . . . . . . . . . .	Number	 00000004h   
+MENU_EVENT . . . . . . . . . . .	Number	 00000008h   
+MOUSE_EVENT  . . . . . . . . . .	Number	 00000002h   
+MessageBox . . . . . . . . . . .	Text   	 MessageBoxA
+NULL . . . . . . . . . . . . . .	Number	 00000000h   
+NUMLOCK_ON . . . . . . . . . . .	Number	 00000020h   
+OPEN_ALWAYS  . . . . . . . . . .	Number	 00000004h   
+OPEN_EXISTING  . . . . . . . . .	Number	 00000003h   
+PeekConsoleInput . . . . . . . .	Text   	 PeekConsoleInputA
+RIGHT_ALT_PRESSED  . . . . . . .	Number	 00000001h   
+RIGHT_CTRL_PRESSED . . . . . . .	Number	 00000004h   
+ReadConsoleInput . . . . . . . .	Text   	 ReadConsoleInputA
+ReadConsole  . . . . . . . . . .	Text   	 ReadConsoleA
+Ri . . . . . . . . . . . . . . .	Byte	 00000E1B _DATA	
+SCROLLLOCK_ON  . . . . . . . . .	Number	 00000040h   
+SHIFT_MASK . . . . . . . . . . .	Number	 00000010h   
+SHIFT_PRESSED  . . . . . . . . .	Number	 00000010h   
+STD_ERROR_HANDLE . . . . . . . .	Number	 -0000000Ch   
+STD_INPUT_HANDLE . . . . . . . .	Number	 -0000000Ah   
+STD_OUTPUT_HANDLE  . . . . . . .	Number	 -0000000Bh   
+SetConsoleTitle  . . . . . . . .	Text   	 SetConsoleTitleA
+TAB  . . . . . . . . . . . . . .	Number	 00000009h   
+TRUE . . . . . . . . . . . . . .	Number	 00000001h   
+TRUNCATE_EXISTING  . . . . . . .	Number	 00000005h   
+Up . . . . . . . . . . . . . . .	Byte	 00000E18 _DATA	
+VK_11  . . . . . . . . . . . . .	Number	 000000BDh   
+VK_12  . . . . . . . . . . . . .	Number	 000000BBh   
+VK_ADD . . . . . . . . . . . . .	Number	 0000006Bh   
+VK_BACK  . . . . . . . . . . . .	Number	 00000008h   
+VK_CANCEL  . . . . . . . . . . .	Number	 00000003h   
+VK_CAPITAL . . . . . . . . . . .	Number	 00000014h   
+VK_CLEAR . . . . . . . . . . . .	Number	 0000000Ch   
+VK_CONTROL . . . . . . . . . . .	Number	 00000011h   
+VK_DECIMAL . . . . . . . . . . .	Number	 0000006Eh   
+VK_DELETE  . . . . . . . . . . .	Number	 0000002Eh   
+VK_DIVIDE  . . . . . . . . . . .	Number	 0000006Fh   
+VK_DOWN  . . . . . . . . . . . .	Number	 00000028h   
+VK_END . . . . . . . . . . . . .	Number	 00000023h   
+VK_ESCAPE  . . . . . . . . . . .	Number	 0000001Bh   
+VK_EXECUTE . . . . . . . . . . .	Number	 0000002Bh   
+VK_F10 . . . . . . . . . . . . .	Number	 00000079h   
+VK_F11 . . . . . . . . . . . . .	Number	 0000007Ah   
+VK_F12 . . . . . . . . . . . . .	Number	 0000007Bh   
+VK_F13 . . . . . . . . . . . . .	Number	 0000007Ch   
+VK_F14 . . . . . . . . . . . . .	Number	 0000007Dh   
+VK_F15 . . . . . . . . . . . . .	Number	 0000007Eh   
+VK_F16 . . . . . . . . . . . . .	Number	 0000007Fh   
+VK_F17 . . . . . . . . . . . . .	Number	 00000080h   
+VK_F18 . . . . . . . . . . . . .	Number	 00000081h   
+VK_F19 . . . . . . . . . . . . .	Number	 00000082h   
+VK_F1  . . . . . . . . . . . . .	Number	 00000070h   
+VK_F20 . . . . . . . . . . . . .	Number	 00000083h   
+VK_F21 . . . . . . . . . . . . .	Number	 00000084h   
+VK_F22 . . . . . . . . . . . . .	Number	 00000085h   
+VK_F23 . . . . . . . . . . . . .	Number	 00000086h   
+VK_F24 . . . . . . . . . . . . .	Number	 00000087h   
+VK_F2  . . . . . . . . . . . . .	Number	 00000071h   
+VK_F3  . . . . . . . . . . . . .	Number	 00000072h   
+VK_F4  . . . . . . . . . . . . .	Number	 00000073h   
+VK_F5  . . . . . . . . . . . . .	Number	 00000074h   
+VK_F6  . . . . . . . . . . . . .	Number	 00000075h   
+VK_F7  . . . . . . . . . . . . .	Number	 00000076h   
+VK_F8  . . . . . . . . . . . . .	Number	 00000077h   
+VK_F9  . . . . . . . . . . . . .	Number	 00000078h   
+VK_HELP  . . . . . . . . . . . .	Number	 0000002Fh   
+VK_HOME  . . . . . . . . . . . .	Number	 00000024h   
+VK_INSERT  . . . . . . . . . . .	Number	 0000002Dh   
+VK_LBUTTON . . . . . . . . . . .	Number	 00000001h   
+VK_LCONTROL  . . . . . . . . . .	Number	 000000A2h   
+VK_LEFT  . . . . . . . . . . . .	Number	 00000025h   
+VK_LMENU . . . . . . . . . . . .	Number	 000000A4h   
+VK_LSHIFT  . . . . . . . . . . .	Number	 000000A0h   
+VK_MENU  . . . . . . . . . . . .	Number	 00000012h   
+VK_MULTIPLY  . . . . . . . . . .	Number	 0000006Ah   
+VK_NEXT  . . . . . . . . . . . .	Number	 00000022h   
+VK_NUMLOCK . . . . . . . . . . .	Number	 00000090h   
+VK_NUMPAD0 . . . . . . . . . . .	Number	 00000060h   
+VK_NUMPAD1 . . . . . . . . . . .	Number	 00000061h   
+VK_NUMPAD2 . . . . . . . . . . .	Number	 00000062h   
+VK_NUMPAD3 . . . . . . . . . . .	Number	 00000063h   
+VK_NUMPAD4 . . . . . . . . . . .	Number	 00000064h   
+VK_NUMPAD5 . . . . . . . . . . .	Number	 00000065h   
+VK_NUMPAD6 . . . . . . . . . . .	Number	 00000066h   
+VK_NUMPAD7 . . . . . . . . . . .	Number	 00000067h   
+VK_NUMPAD8 . . . . . . . . . . .	Number	 00000068h   
+VK_NUMPAD9 . . . . . . . . . . .	Number	 00000069h   
+VK_PAUSE . . . . . . . . . . . .	Number	 00000013h   
+VK_PRINT . . . . . . . . . . . .	Number	 0000002Ah   
+VK_PRIOR . . . . . . . . . . . .	Number	 00000021h   
+VK_RBUTTON . . . . . . . . . . .	Number	 00000002h   
+VK_RCONTROL  . . . . . . . . . .	Number	 000000A3h   
+VK_RETURN  . . . . . . . . . . .	Number	 0000000Dh   
+VK_RIGHT . . . . . . . . . . . .	Number	 00000027h   
+VK_RMENU . . . . . . . . . . . .	Number	 000000A5h   
+VK_RSHIFT  . . . . . . . . . . .	Number	 000000A1h   
+VK_SCROLL  . . . . . . . . . . .	Number	 00000091h   
+VK_SEPARATER . . . . . . . . . .	Number	 0000006Ch   
+VK_SHIFT . . . . . . . . . . . .	Number	 00000010h   
+VK_SNAPSHOT  . . . . . . . . . .	Number	 0000002Ch   
+VK_SPACE . . . . . . . . . . . .	Number	 00000020h   
+VK_SUBTRACT  . . . . . . . . . .	Number	 0000006Dh   
+VK_TAB . . . . . . . . . . . . .	Number	 00000009h   
+VK_UP  . . . . . . . . . . . . .	Number	 00000026h   
+WINDOW_BUFFER_SIZE_EVENT . . . .	Number	 00000004h   
+WriteConsoleOutputCharacter  . .	Text   	 WriteConsoleOutputCharacterA
+WriteConsole . . . . . . . . . .	Text   	 WriteConsoleA
+a  . . . . . . . . . . . . . . .	Word	 00000000 _DATA	
+bRead  . . . . . . . . . . . . .	DWord	 00000E68 _DATA	
+black  . . . . . . . . . . . . .	Number	 00000000h   
+blue . . . . . . . . . . . . . .	Number	 00000001h   
+brown  . . . . . . . . . . . . .	Number	 00000006h   
+cScore . . . . . . . . . . . . .	DWord	 00000E20 _DATA	
+cyan . . . . . . . . . . . . . .	Number	 00000003h   
+delTime  . . . . . . . . . . . .	DWord	 00000E26 _DATA	
+d  . . . . . . . . . . . . . . .	Byte	 00000E24 _DATA	
+eGame  . . . . . . . . . . . . .	Byte	 00000E1F _DATA	
+eTail  . . . . . . . . . . . . .	Byte	 00000E1C _DATA	
+exit . . . . . . . . . . . . . .	Text   	 INVOKE ExitProcess,0
+foodC  . . . . . . . . . . . . .	Byte	 00000E15 _DATA	
+foodR  . . . . . . . . . . . . .	Byte	 00000E14 _DATA	
+gray . . . . . . . . . . . . . .	Number	 00000008h   
+green  . . . . . . . . . . . . .	Number	 00000002h   
+headC  . . . . . . . . . . . . .	Byte	 00000E13 _DATA	
+headR  . . . . . . . . . . . . .	Byte	 00000E12 _DATA	
+hitS . . . . . . . . . . . . . .	Byte	 00000E3D _DATA	
+lightBlue  . . . . . . . . . . .	Number	 00000009h   
+lightCyan  . . . . . . . . . . .	Number	 0000000Bh   
+lightGray  . . . . . . . . . . .	Number	 00000007h   
+lightGreen . . . . . . . . . . .	Number	 0000000Ah   
+lightMagenta . . . . . . . . . .	Number	 0000000Dh   
+lightRed . . . . . . . . . . . .	Number	 0000000Ch   
+magenta  . . . . . . . . . . . .	Number	 00000005h   
+menuS  . . . . . . . . . . . . .	Byte	 00000E2A _DATA	
+myHandle . . . . . . . . . . . .	DWord	 00000E50 _DATA	
+newD . . . . . . . . . . . . . .	Byte	 00000E25 _DATA	
+numInp . . . . . . . . . . . . .	DWord	 00000E54 _DATA	
+red  . . . . . . . . . . . . . .	Number	 00000004h   
+scoreS . . . . . . . . . . . . .	Byte	 00000E47 _DATA	
+search . . . . . . . . . . . . .	Word	 00000E1D _DATA	
+tailC  . . . . . . . . . . . . .	Byte	 00000E11 _DATA	
+tailR  . . . . . . . . . . . . .	Byte	 00000E10 _DATA	
+temp . . . . . . . . . . . . . .	Byte	 00000E58 _DATA	
+tmpC . . . . . . . . . . . . . .	Byte	 00000E17 _DATA	
+tmpR . . . . . . . . . . . . . .	Byte	 00000E16 _DATA	
+white  . . . . . . . . . . . . .	Number	 0000000Fh   
+wsprintf . . . . . . . . . . . .	Text   	 wsprintfA
+yellow . . . . . . . . . . . . .	Number	 0000000Eh   
+
+	   0 Warnings
+	   0 Errors
